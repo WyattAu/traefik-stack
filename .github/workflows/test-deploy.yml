@@ -25,14 +25,14 @@ jobs:
 
       - name: Validate docker-compose files
         run: |
-          docker-compose config -q
+          docker compose config -q
           echo "docker-compose.yml validation passed"
 
           # Validate service compose files
           for svc in services/*/docker-compose.yml; do
             if [ -f "$svc" ]; then
               echo "Validating $svc"
-              docker-compose -f "$svc" config -q
+              docker compose -f "$svc" config -q
               echo "$svc validation passed"
             fi
           done
@@ -109,7 +109,7 @@ jobs:
           touch traefik/acme.json
           chmod 600 traefik/acme.json
           echo "Starting minimal Traefik container for testing..."
-          docker-compose up -d traefik
+          docker compose up -d traefik
 
       - name: Wait for Traefik to start
         run: |
@@ -129,4 +129,4 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: docker-compose down -v
+        run: docker compose down -v

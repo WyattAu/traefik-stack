@@ -46,17 +46,17 @@ done
 
 # Test Docker Compose files
 echo "Testing Docker Compose configurations..."
-docker-compose config -q
-echo "Main docker-compose validation passed"
+docker compose config -q
+echo "Main docker compose validation passed"
 
 # Test service configurations
 for svc in services/*/docker-compose.yml; do
     if [ -f "$svc" ]; then
         echo "Testing $svc"
-        docker-compose -f "$svc" config -q
+        docker compose -f "$svc" config -q
     fi
 done
-echo "Service docker-compose validation passed"
+echo "Service docker compose validation passed"
 
 echo "All configuration validation passed"
 

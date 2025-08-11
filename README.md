@@ -51,7 +51,7 @@ A Traefik v3 reverse proxy setup with Cloudflare integration.
 6. **Deploy:**
 
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 ## Configuration
@@ -60,12 +60,12 @@ Update `.env` file with your values, then deploy each service:
 
 ```bash
 # Deploy main Traefik
-docker-compose up -d
+docker compose up -d
 
 # Deploy services individually
-docker-compose -f services/gitea/docker-compose.yml up -d
-docker-compose -f services/authentik/docker-compose.yml up -d
-docker-compose -f services/seafile/docker-compose.yml up -d
+docker compose -f services/gitea/docker-compose.yml up -d
+docker compose -f services/authentik/docker-compose.yml up -d
+docker compose -f services/seafile/docker-compose.yml up -d
 ```
 
 ## Directory Structure
