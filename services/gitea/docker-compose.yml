@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  gitea:
+    image: gitea/gitea:1.21-rootless
+    container_name: gitea
+    restart: unless-stopped
+    volumes:
+      - ./gitea/data:/var/lib/gitea
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3000:3000"
+      - "2222:2222"
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gitea.rule=Host(`${GITEA_DOMAIN}`)"
+      - "traefik.http.routers.gitea.entrypoints=websecure"
+      - "traefik.http.routers.gitea.tls.certresolver=cloudflare"
+      - "traefik.http.routers.gitea.middlewares=security-headers@file,rate-limit@file"
+      - "traefik.http.routers.gitea.service=gitea"
+      - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+
+networks:
+  traefik_network:
+    external: true
+    name: ${TRAEFIK_NETWORK}

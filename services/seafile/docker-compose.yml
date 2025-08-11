@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.11
+    container_name: seafile-mariadb
+    environment:
+      - MYSQL_ROOT_PASSWORD=${POSTGRES_PASSWORD}
+      - MYSQL_LOG_CONSOLE=true
+    volumes:
+      - ./db:/var/lib/mysql
+    networks:
+      - traefik_network
+
+  memcached:
+    image: memcached:1.6.18
+    container_name: seafile-memcached
+    entrypoint: memcached -m 256
+    networks:
+      - traefik_network
+
+  seafile:
+    image: seafileltd/seafile-mc:latest
+    container_name: seafile
+    volumes:
+      - ./seafile-data:/shared
+    environment:
+      - DB_HOST=db
+      - DB_ROOT_PASSWD=${POSTGRES_PASSWORD}
+      - TIME_ZONE=${TRAEFIK_TIMEZONE}
+      - SEAFILE_ADMIN_EMAIL=admin@${CF_DOMAIN}
+      - SEAFILE_ADMIN_PASSWORD=${POSTGRES_PASSWORD}
+      - SEAFILE_SERVER_LETSENCRYPT=false
+    depends_on:
+      - db
+      - memcached
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.seafile.rule=Host(`${SEAFILE_DOMAIN}`)"
+      - "traefik.http.routers.seafile.entrypoints=websecure"
+      - "traefik.http.routers.seafile.tls.certresolver=cloudflare"
+      - "traefik.http.routers.seafile.service=seafile"
+      - "traefik.http.services.seafile.loadbalancer.server.port=80"
+      - "traefik.http.routers.seafile.middlewares=security-headers@file,rate-limit@file"
+
+networks:
+  traefik_network:
+    external: true
+    name: ${TRAEFIK_NETWORK}

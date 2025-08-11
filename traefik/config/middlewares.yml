@@ -1,0 +1,57 @@
+http:
+  middlewares:
+    security-headers:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+          - PATCH
+        accessControlAllowOriginList:
+          - "https://${TRAEFIK_DOMAIN}"
+          - "https://${GITEA_DOMAIN}"
+          - "https://${AUTHENTIK_DOMAIN}"
+          - "https://${SEAFILE_DOMAIN}"
+        accessControlMaxAge: 100
+        addVaryHeader: true
+
+        customFrameOptionsValue: "SAMEORIGIN"
+        contentTypeNosniff: true
+        browserXssFilter: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsSeconds: 31536000
+        stsPreload: true
+
+        contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';"
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+        customResponseHeaders:
+          X-Robots-Tag: "none,noarchive,nosnippet,notranslate,noimageindex"
+          Server: ""
+          X-Content-Type-Options: "nosniff"
+          X-Frame-Options: "SAMEORIGIN"
+          X-XSS-Protection: "1; mode=block"
+
+    rate-limit:
+      rateLimit:
+        average: 200
+        burst: 100
+        period: 1m
+
+    traefik-auth:
+      basicAuth:
+        users:
+          - "${BASIC_AUTH_USER}:${BASIC_AUTH_PASSWORD_HASH}"
+        realm: "Traefik Dashboard"
+        headerField: "X-WebAuth-User"
+        removeHeader: true
+
+    compress:
+      compress:
+        excludedContentTypes:
+          - "text/event-stream"
+          - "multipart/x-mixed-replace"
+        minResponseBodyBytes: 1024

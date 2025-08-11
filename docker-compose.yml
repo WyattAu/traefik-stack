@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: traefik:${TRAEFIK_VERSION}
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/traefik.yml"
+    ports:
+      - "${TRAEFIK_HTTP_PORT}:${TRAEFIK_HTTP_PORT}"
+      - "${TRAEFIK_HTTPS_PORT}:${TRAEFIK_HTTPS_PORT}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/config:/config:ro
+      - ./traefik/acme.json:/acme.json
+      - ./traefik/logs:/var/log/traefik
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - CF_API_EMAIL=${CF_API_EMAIL}
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      - TZ=${TRAEFIK_TIMEZONE}
+    networks:
+      - traefik_network
+    labels:
+      # Traefik Dashboard
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.rule=Host(`${TRAEFIK_DOMAIN}`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.tls.certresolver=cloudflare"
+      - "traefik.http.routers.traefik.middlewares=traefik-auth@file,security-headers@file"
+      - "traefik.http.routers.traefik.tls.options=default@file"
+      
+      # Ping endpoint
+      - "traefik.http.routers.ping.rule=Host(`${TRAEFIK_DOMAIN}`) && Path(`/ping`)"
+      - "traefik.http.routers.ping.service=ping@internal"
+      - "traefik.http.routers.ping.entrypoints=websecure"
+    
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  cloudflare-ddns:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns
+    restart: unless-stopped
+    environment:
+      - API_KEY=${CF_DNS_API_TOKEN}
+      - ZONE=${CF_DOMAIN}
+      - SUBDOMAIN=*
+      - PROXIED=${CF_PROXIED}
+    networks:
+      - traefik_network
+
+networks:
+  traefik_network:
+    name: ${TRAEFIK_NETWORK}
+    external: false

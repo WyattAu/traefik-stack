@@ -1,0 +1,80 @@
+global:
+  checkNewVersion: true
+  sendAnonymousUsage: false
+
+serversTransport:
+  insecureSkipVerify: false
+  maxIdleConnsPerHost: ${TRAEFIK_MAX_IDLE_CONNS}
+  idleConnTimeout: ${TRAEFIK_IDLE_TIMEOUT}
+
+api:
+  dashboard: true
+  debug: false
+  insecure: false
+
+ping:
+  entryPoint: ping
+
+log:
+  level: ${TRAEFIK_LOG_LEVEL}
+  format: json
+  filePath: /var/log/traefik/traefik.log
+
+accessLog:
+  filePath: /var/log/traefik/access.log
+  format: json
+  bufferingSize: 100
+  filters:
+    retryAttempts: true
+    minDuration: "10ms"
+
+entryPoints:
+  web:
+    address: ":${TRAEFIK_HTTP_PORT}"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  
+  websecure:
+    address: ":${TRAEFIK_HTTPS_PORT}"
+    http:
+      tls:
+        options: default
+        certResolver: cloudflare
+      middlewares:
+        - security-headers@file
+        - rate-limit@file
+        - compress@file
+
+  ping:
+    address: ":8082"
+
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    watch: true
+    exposedByDefault: false
+    network: ${TRAEFIK_NETWORK}
+    swarmMode: false
+    allowEmptyServices: false
+    
+  file:
+    directory: /config
+    watch: true
+
+certificatesResolvers:
+  cloudflare:
+    acme:
+      email: ${ACME_EMAIL}
+      storage: ${ACME_STORAGE}
+      caServer: ${ACME_CA_SERVER}
+      keyType: EC384
+      dnsChallenge:
+        provider: cloudflare
+        delayBeforeCheck: 5
+        resolvers:
+          - "1.1.1.1:53"
+          - "1.0.0.1:53"
