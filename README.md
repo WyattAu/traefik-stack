@@ -16,7 +16,7 @@ A Traefik v3 reverse proxy setup with Cloudflare integration.
 1. **Clone the repository:**
 
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/WyattAu/traefik-stack.git
    cd traefik-stack
    ```
 
