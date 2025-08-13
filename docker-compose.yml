@@ -26,6 +26,12 @@ services:
       - "--certificatesresolvers.cloudflare.acme.email=${CLOUDFLARE_EMAIL}"
       - "--certificatesresolvers.cloudflare.acme.storage=/etc/traefik/acme.json"
       - "--providers.file.filename=/etc/traefik/rules.yml"
+      - "--entryPoints.websecure.transport.respondingTimeouts.readTimeout=36000"
+      - "--entryPoints.websecure.transport.respondingTimeouts.idleTimeout=36000"
+      - "--log.level=DEBUG"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/logs/access.log"
+      - "--accesslog.bufferingsize=100"
     security_opt:
       - no-new-privileges:true
     networks:
@@ -88,7 +94,16 @@ services:
       - SUBDOMAIN=seafile
       - PROXIED=true
       - TZ=${TZ}
-  
+  cloudflare-ddns-oods:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns-oods
+    restart: unless-stopped
+    environment:
+      - API_KEY=${CLOUDFLARE_DNS_API_TOKEN}
+      - ZONE=${DOMAIN}
+      - SUBDOMAIN=oods.seafile
+      - PROXIED=true
+      - TZ=${TZ}
   cloudflare-ddns-auth:
     image: oznu/cloudflare-ddns:latest
     container_name: cloudflare-ddns-auth
@@ -151,6 +166,14 @@ services:
       - MYSQL_ROOT_PASSWORD=${SEAFILE_DB_PASSWORD}
       - MYSQL_LOG_CONSOLE=true
       - TZ=${TZ}
+    healthcheck:
+      test: [
+        "CMD", "mysqladmin", "ping", "-h", "localhost",
+        "--user=root", "--password=${SEAFILE_DB_PASSWORD}"
+      ]
+      timeout: 5s
+      interval: 10s
+      retries: 5
 
   seafile-memcached:
     image: memcached:1.6
@@ -167,8 +190,8 @@ services:
     networks:
       - proxy
       - seafile-internal
-  #  ports: # Only for the first-time setup script
-  #    - "8082:8082"
+    #  ports: # Only for the first-time setup script
+    #    - "8082:8082"
     volumes:
       - ${APP_DATA_PATH}/seafile/data:/shared
     environment:
@@ -179,16 +202,66 @@ services:
       - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
       - SEAFILE_SERVER_LETSENCRYPT=false # Traefik handles SSL
       - SEAFILE_SERVER_HOSTNAME=seafile.${DOMAIN}
+      - SEAFILE_ONLYOFFICE_ENABLED=true
+      - SEAFILE_ONLYOFFICE_HOST=https://oods.seafile.${DOMAIN}
+      - SEAFILE_ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
+
     depends_on:
       - seafile-db
       - seafile-memcached
     labels:
+      # Network & service definition
+      - "traefik.http.routers.seafile.service=seafile"
+      - "traefik.http.routers.seafile.docker.network=proxy"  # Critical fix
+      - "traefik.http.routers.seafile-dav.docker.network=proxy"
+      - "traefik.http.routers.seafile-http.docker.network=proxy"
+
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"  # CRITICAL
+      
+      # Root Router (Main Service)
       - "traefik.http.routers.seafile.rule=Host(`seafile.${DOMAIN}`)"
       - "traefik.http.routers.seafile.tls.certresolver=cloudflare"
-      - "traefik.http.services.seafile.loadbalancer.server.port=80"
-      - "traefik.http.routers.seafile.middlewares=security-headers@file"
-
+      - "traefik.http.routers.seafile.entrypoints=websecure"
+      # - "traefik.http.routers.seafile.service=seafile@docker"  # SERVICE REFERENCE
+      - "traefik.http.routers.seafile.priority=1"  # Lowest priority
+      
+      # Service Definition
+      - "traefik.http.services.seafile.loadbalancer.server.port=8000"  # SINGLE PORT DEF
+      
+      # Seafdav Router
+      - "traefik.http.routers.seafile-dav.rule=Host(`seafile.${DOMAIN}`) && PathPrefix(`/seafdav`)"
+      - "traefik.http.routers.seafile-dav.entrypoints=websecure"
+      - "traefik.http.services.seafile-dav.loadbalancer.server.port=8080"
+      - "traefik.http.routers.seafile-dav.priority=10"
+      
+      # Seafhttp Router
+      - "traefik.http.routers.seafile-http.rule=Host(`seafile.${DOMAIN}`) && PathPrefix(`/seafhttp`)"
+      - "traefik.http.routers.seafile-http.entrypoints=websecure"
+      - "traefik.http.services.seafile-http.loadbalancer.server.port=8082"
+      - "traefik.http.routers.seafile-http.middlewares=seafile-strip"
+      - "traefik.http.middlewares.seafile-strip.stripprefix.prefixes=/seafhttp"
+      - "traefik.http.routers.seafile-http.priority=10"
+  onlyoffice-documentserver:
+    image: onlyoffice/documentserver:latest
+    restart: unless-stopped
+    container_name: onlyoffice-documentserver
+    environment:
+      - JWT_ENABLED=true
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
+    networks:
+      - proxy
+      - seafile-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.onlyoffice.rule=Host(`oods.seafile.${DOMAIN}`)"
+      - "traefik.http.routers.onlyoffice.entrypoints=websecure"
+      - "traefik.http.routers.onlyoffice.tls.certresolver=cloudflare"
+      - "traefik.http.routers.onlyoffice.middlewares=security-headers@file,onlyoffice-headers"
+      - "traefik.http.services.onlyoffice.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.onlyoffice-headers.headers.customrequestheaders.X-Forwarded-Host=oods.seafile.${DOMAIN}"
+      - "traefik.http.middlewares.onlyoffice-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
   # ----------------------------------------------------------------
   # 5. Authentik (Authentication Provider)
   # ----------------------------------------------------------------

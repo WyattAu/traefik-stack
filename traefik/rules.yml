@@ -4,9 +4,12 @@ http:
     # A middleware to add common security headers
     security-headers:
       headers:
+        sslRedirect: true
         browserXssFilter: true
         contentTypeNosniff: true
         frameDeny: true
+        forceSTSHeader: true
         stsSeconds: 31536000
         stsIncludeSubdomains: true
         stsPreload: true
+        referrerPolicy: "same-origin"
