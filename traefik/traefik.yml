@@ -2,79 +2,39 @@ global:
   checkNewVersion: true
   sendAnonymousUsage: false
 
-serversTransport:
-  insecureSkipVerify: false
-  maxIdleConnsPerHost: ${TRAEFIK_MAX_IDLE_CONNS}
-  idleConnTimeout: ${TRAEFIK_IDLE_TIMEOUT}
-
-api:
-  dashboard: true
-  debug: false
-  insecure: false
-
-ping:
-  entryPoint: ping
-
-log:
-  level: ${TRAEFIK_LOG_LEVEL}
-  format: json
-  filePath: /var/log/traefik/traefik.log
-
-accessLog:
-  filePath: /var/log/traefik/access.log
-  format: json
-  bufferingSize: 100
-  filters:
-    retryAttempts: true
-    minDuration: "10ms"
-
-entryPoints:
-  web:
-    address: ":${TRAEFIK_HTTP_PORT}"
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
-  
-  websecure:
-    address: ":${TRAEFIK_HTTPS_PORT}"
-    http:
-      tls:
-        options: default
-        certResolver: cloudflare
-      middlewares:
-        - security-headers@file
-        - rate-limit@file
-        - compress@file
-
-  ping:
-    address: ":8082"
-
+# Configure Docker as the provider
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
-    watch: true
-    exposedByDefault: false
-    network: ${TRAEFIK_NETWORK}
-    swarmMode: false
-    allowEmptyServices: false
-    
+    exposedByDefault: false # Explicitly enable services for Traefik
   file:
-    directory: /config
-    watch: true
+    filename: /etc/traefik/rules.yml # Path to dynamic rules file
 
+# Define API and dashboard (secured)
+api:
+  dashboard: true
+  insecure: true # DO NOT expose this directly. We will secure it with labels in docker-compose.
+
+# Define entrypoints (ports Traefik listens on)
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: "websecure"
+          scheme: "https"
+  websecure:
+    address: ":443"
+
+# Configure Let's Encrypt SSL certificate generation
 certificatesResolvers:
   cloudflare:
     acme:
-      email: ${ACME_EMAIL}
-      storage: ${ACME_STORAGE}
-      caServer: ${ACME_CA_SERVER}
-      keyType: EC384
+      email: ${CLOUDFLARE_EMAIL}
+      storage: "/etc/traefik/acme.json"
       dnsChallenge:
-        provider: cloudflare
-        delayBeforeCheck: 5
-        resolvers:
-          - "1.1.1.1:53"
-          - "1.0.0.1:53"
+        provider: "cloudflare"
+        # The following environment variables are passed from docker-compose.yml
+        # CLOUDFLARE_DNS_API_TOKEN
+        # CLOUDFLARE_ZONE_API_TOKEN (not used if using DNS token)

@@ -1,0 +1,12 @@
+
+http:
+  middlewares:
+    # A middleware to add common security headers
+    security-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        frameDeny: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
