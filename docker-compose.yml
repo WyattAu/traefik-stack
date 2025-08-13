@@ -55,15 +55,60 @@ services:
   # ----------------------------------------------------------------
   # 2. Cloudflare DDNS (Dynamic DNS Updater)
   # ----------------------------------------------------------------
-  cloudflare-ddns:
+
+  cloudflare-ddns-root:
     image: oznu/cloudflare-ddns:latest
-    container_name: cloudflare-ddns
+    container_name: cloudflare-ddns-root
     restart: unless-stopped
     environment:
       - API_KEY=${CLOUDFLARE_DNS_API_TOKEN}
       - ZONE=${DOMAIN}
-      - SUBDOMAIN=@,gitea,seafile,auth,traefik # Use @ for the root domain, or specify a subdomain, separate by comma without space
-      - PROXIED=true # Set to true to proxy through Cloudflare
+      - SUBDOMAIN=@
+      - PROXIED=true
+      - TZ=${TZ}
+
+  cloudflare-ddns-gitea:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns-gitea
+    restart: unless-stopped
+    environment:
+      - API_KEY=${CLOUDFLARE_DNS_API_TOKEN}
+      - ZONE=${DOMAIN}
+      - SUBDOMAIN=gitea
+      - PROXIED=true
+      - TZ=${TZ}
+  
+  cloudflare-ddns-seafile:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns-seafile
+    restart: unless-stopped
+    environment:
+      - API_KEY=${CLOUDFLARE_DNS_API_TOKEN}
+      - ZONE=${DOMAIN}
+      - SUBDOMAIN=seafile
+      - PROXIED=true
+      - TZ=${TZ}
+  
+  cloudflare-ddns-auth:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns-auth
+    restart: unless-stopped
+    environment:
+      - API_KEY=${CLOUDFLARE_DNS_API_TOKEN}
+      - ZONE=${DOMAIN}
+      - SUBDOMAIN=auth
+      - PROXIED=true
+      - TZ=${TZ}
+  
+  cloudflare-ddns-traefik:
+    image: oznu/cloudflare-ddns:latest
+    container_name: cloudflare-ddns-traefik
+    restart: unless-stopped
+    environment:
+      - API_KEY=${CLOUDFLARE_DNS_API_TOKEN}
+      - ZONE=${DOMAIN}
+      - SUBDOMAIN=traefik
+      - PROXIED=true
       - TZ=${TZ}
 
   # ----------------------------------------------------------------
@@ -122,8 +167,8 @@ services:
     networks:
       - proxy
       - seafile-internal
-    ports: # Only for the first-time setup script
-      - "8082:8082"
+  #  ports: # Only for the first-time setup script
+  #    - "8082:8082"
     volumes:
       - ${APP_DATA_PATH}/seafile/data:/shared
     environment:
@@ -187,16 +232,17 @@ services:
       - proxy
       - authentik-internal
     environment:
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
-      AUTHENTIK_POSTGRESQL__HOST: authentik-db
-      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER}
-      AUTHENTIK_POSTGRESQL__NAME: authentik
-      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS}
-      AUTHENTIK_REDIS__HOST: authentik-redis
-      AUTHENTIK_LISTEN__HTTP: 0.0.0.0:9000
-      AUTHENTIK_LISTEN__HTTPS: 0.0.0.0:9443
-      AUTHENTIK_ERROR_REPORTING__ENABLED: "true"
-      TZ: ${TZ}
+      - AUTHENTIK_INSECURE=true
+      - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
+      - AUTHENTIK_POSTGRESQL__HOST=authentik-db
+      - AUTHENTIK_POSTGRESQL__USER=${AUTHENTIK_PG_USER}
+      - AUTHENTIK_POSTGRESQL__NAME=authentik
+      - AUTHENTIK_POSTGRESQL__PASSWORD=${AUTHENTIK_PG_PASS}
+      - AUTHENTIK_REDIS__HOST=authentik-redis
+      - AUTHENTIK_LISTEN__HTTP=0.0.0.0:9000
+      - AUTHENTIK_LISTEN__HTTPS=0.0.0.0:9443
+      - AUTHENTIK_ERROR_REPORTING__ENABLED="true"
+      - TZ=${TZ}
     volumes:
       - ${APP_DATA_PATH}/authentik/geoip:/geoip
       - ${APP_DATA_PATH}/authentik/templates:/templates
@@ -209,7 +255,9 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.authentik.rule=Host(`auth.${DOMAIN}`)"
       - "traefik.http.routers.authentik.tls.certresolver=cloudflare"
-      - "traefik.http.services.authentik.loadbalancer.server.port=9000"
+      #- "traefik.http.services.authentik.loadbalancer.server.port=9000"
+      - "traefik.http.services.authentik.loadbalancer.server.port=9443"
+      - "traefik.http.services.authentik.loadbalancer.server.scheme=https"
       - "traefik.http.routers.authentik.middlewares=security-headers@file"
 
   authentik-worker:
