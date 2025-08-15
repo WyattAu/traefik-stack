@@ -164,6 +164,7 @@ services:
       - ${APP_DATA_PATH}/seafile/db:/var/lib/mysql
     environment:
       - MYSQL_ROOT_PASSWORD=${SEAFILE_DB_PASSWORD}
+      - MYSQL_ROOT_HOST=%
       - MYSQL_LOG_CONSOLE=true
       - TZ=${TZ}
     healthcheck:
@@ -195,14 +196,14 @@ services:
     image: seafileltd/seafile-mc:13.0.8
     container_name: seafile
     restart: unless-stopped
-    user: "${PUID}:${PGID}"
+    # user: "${PUID}:${PGID}"
     networks: [proxy,seafile-internal]
     #ports: # Only for initial setup
     #  - "8000:8000"
     volumes:
       - ${APP_DATA_PATH}/seafile/data:/shared
     environment:
-    - DB_HOST=seafile-db
+    - DB_HOST=seafile-db.seafile-internal
     - DB_ROOT_PASSWD=${SEAFILE_DB_PASSWORD}
     - TIME_ZONE=${TZ}
     - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
