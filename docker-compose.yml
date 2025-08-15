@@ -5,6 +5,11 @@ networks:
     internal: true
   seafile-internal:
     internal: true
+    name: seafile-internal
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.31.0.0/16
 
 services:
   # ----------------------------------------------------------------
@@ -167,14 +172,20 @@ services:
       - MYSQL_ROOT_HOST=%
       - MYSQL_LOG_CONSOLE=true
       - TZ=${TZ}
+      - MARIADB_AUTO_UPGRADE=1
     healthcheck:
       test: [
         "CMD", "mysqladmin", "ping", "-h", "localhost",
         "--user=root", "--password=${SEAFILE_DB_PASSWORD}"
       ]
+      interval: 20s
+      start_period: 30s
       timeout: 5s
-      interval: 10s
-      retries: 5
+      retries: 10
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   seafile-memcached:
     image: memcached:1.6-alpine
@@ -196,10 +207,9 @@ services:
     image: seafileltd/seafile-mc:13.0.8
     container_name: seafile
     restart: unless-stopped
-    # user: "${PUID}:${PGID}"
-    networks: [proxy,seafile-internal]
-    #ports: # Only for initial setup
-    #  - "8000:8000"
+    networks: 
+      - proxy
+      - seafile-internal
     volumes:
       - ${APP_DATA_PATH}/seafile/data:/shared
     environment:
