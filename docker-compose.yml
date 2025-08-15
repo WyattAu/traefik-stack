@@ -182,76 +182,85 @@ services:
     networks:
       - seafile-internal
     entrypoint: memcached -m 256
+    healthcheck:
+      # This command uses the shell to send the "stats" command to memcached via netcat (nc)
+      # and then uses grep to check for a valid response ("STAT pid").
+      # This confirms the service is not just running, but also responsive.
+      test: ["CMD-SHELL", "echo 'stats' | nc 127.0.0.1 11211 | grep 'STAT pid'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   seafile:
     image: seafileltd/seafile-mc:13.0.8
     container_name: seafile
     restart: unless-stopped
-    networks:
-      - proxy
-      - seafile-internal
-    #  ports: # Only for the first-time setup script
-    #    - "8082:8082"
+    user: "${PUID}:${PGID}"
+    networks: [proxy,seafile-internal]
+    ports: # Only for initial setup
+      - "8000:8000"
     volumes:
       - ${APP_DATA_PATH}/seafile/data:/shared
     environment:
-      - DB_HOST=seafile-db
-      - DB_ROOT_PASSWD=${SEAFILE_DB_PASSWORD}
-      - TIME_ZONE=${TZ}
-      - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
-      - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
-      - SEAFILE_SERVER_LETSENCRYPT=false # Traefik handles SSL
-      - SEAFILE_SERVER_HOSTNAME=seafile.${DOMAIN}
-      - SEAFILE_ONLYOFFICE_ENABLED=true
-      - SEAFILE_ONLYOFFICE_HOST=https://oods.seafile.${DOMAIN}
-      - SEAFILE_ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
+    - DB_HOST=seafile-db
+    - DB_ROOT_PASSWD=${SEAFILE_DB_PASSWORD}
+    - TIME_ZONE=${TZ}
+    - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
+    - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
+    - SEAFILE_SERVER_LETSENCRYPT=false
+    - SEAFILE_SERVER_HOSTNAME=seafile.${DOMAIN}
+    - SEAFILE_ONLYOFFICE_ENABLED=true
+    - SEAFILE_ONLYOFFICE_HOST=https://oods.seafile.${DOMAIN}
+    - SEAFILE_ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
 
     depends_on:
-      - seafile-db
-      - seafile-memcached
+      seafile-db:
+        condition: service_healthy
+      seafile-memcached:
+        condition: service_healthy
     labels:
-      # Network & service definition
-      - "traefik.http.routers.seafile.service=seafile"
-      - "traefik.http.routers.seafile.docker.network=proxy"  # Critical fix
-      - "traefik.http.routers.seafile-dav.docker.network=proxy"
-      - "traefik.http.routers.seafile-http.docker.network=proxy"
+    # -------------------------------------------------------------
+    #   TRAEFIK – root router (web UI)
+    # -------------------------------------------------------------
+    - "traefik.enable=true"
+    - "traefik.docker.network=proxy"
 
-      - "traefik.enable=true"
-      - "traefik.docker.network=proxy"  # CRITICAL
-      
-      # Root Router (Main Service)
-      - "traefik.http.routers.seafile.rule=Host(`seafile.${DOMAIN}`)"
-      - "traefik.http.routers.seafile.tls.certresolver=cloudflare"
-      - "traefik.http.routers.seafile.entrypoints=websecure"
-      # - "traefik.http.routers.seafile.service=seafile@docker"  # SERVICE REFERENCE
-      - "traefik.http.routers.seafile.priority=1"  # Lowest priority
-      
-      # Service Definition
-      - "traefik.http.services.seafile.loadbalancer.server.port=8000"  # SINGLE PORT DEF
-      
-      # Seafdav Router
-      - "traefik.http.routers.seafile-dav.rule=Host(`seafile.${DOMAIN}`) && PathPrefix(`/seafdav`)"
-      - "traefik.http.routers.seafile-dav.entrypoints=websecure"
-      - "traefik.http.services.seafile-dav.loadbalancer.server.port=8080"
-      - "traefik.http.routers.seafile-dav.priority=10"
-      
-      # Seafhttp Router
-      - "traefik.http.routers.seafile-http.rule=Host(`seafile.${DOMAIN}`) && PathPrefix(`/seafhttp`)"
-      - "traefik.http.routers.seafile-http.entrypoints=websecure"
-      - "traefik.http.services.seafile-http.loadbalancer.server.port=8082"
-      - "traefik.http.routers.seafile-http.middlewares=seafile-strip"
-      - "traefik.http.middlewares.seafile-strip.stripprefix.prefixes=/seafhttp"
-      - "traefik.http.routers.seafile-http.priority=10"
+    - "traefik.http.routers.seafile.rule=Host(`seafile.${DOMAIN}`)"
+    - "traefik.http.routers.seafile.tls.certresolver=cloudflare"
+    - "traefik.http.routers.seafile.entrypoints=websecure"
+    - "traefik.http.routers.seafile.service=seafile"
+    # -------------------------------------------------------------
+    #   TRAEFIK -- seafdav router
+    # -------------------------------------------------------------
+    - "traefik.http.routers.seafile-dav.rule=Host(`seafile.${DOMAIN}`) && PathPrefix(`/seafdav`)"
+    - "traefik.http.routers.seafile-dav.entrypoints=websecure"
+    - "traefik.http.routers.seafile-dav.tls.certresolver=cloudflare" # Added for consistency
+    - "traefik.http.routers.seafile-dav.service=seafile-dav"
+    - "traefik.http.services.seafile-dav.loadbalancer.server.port=8080"
+    # -------------------------------------------------------------
+    #   TRAEFIK -- seafhttp router
+    # -------------------------------------------------------------
+    - "traefik.http.routers.seafile-http.rule=Host(`seafile.${DOMAIN}`) && PathPrefix(`/seafhttp`)"
+    - "traefik.http.routers.seafile-http.entrypoints=websecure"
+    - "traefik.http.routers.seafile-http.tls.certresolver=cloudflare" # Added for consistency
+    - "traefik.http.routers.seafile-http.service=seafile-http"
+    - "traefik.http.middlewares.seafile-strip.stripprefix.prefixes=/seafhttp"
+    - "traefik.http.routers.seafile-http.middlewares=seafile-strip"
+    - "traefik.http.services.seafile-http.loadbalancer.server.port=8082"
+
+    # -------------------------------------------------------------
+    #   TRAEFIK -- service port definitions
+    # -------------------------------------------------------------
+    - "traefik.http.services.seafile.loadbalancer.server.port=8000"
+
   onlyoffice-documentserver:
     image: onlyoffice/documentserver:latest
-    restart: unless-stopped
     container_name: onlyoffice-documentserver
+    restart: unless-stopped
+    networks: [proxy, seafile-internal]
     environment:
       - JWT_ENABLED=true
       - JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
-    networks:
-      - proxy
-      - seafile-internal
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=proxy"
