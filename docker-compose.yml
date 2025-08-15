@@ -176,7 +176,7 @@ services:
       retries: 5
 
   seafile-memcached:
-    image: memcached:1.6
+    image: memcached:1.6-alpine
     container_name: seafile-memcached
     restart: unless-stopped
     networks:
@@ -197,8 +197,8 @@ services:
     restart: unless-stopped
     user: "${PUID}:${PGID}"
     networks: [proxy,seafile-internal]
-    ports: # Only for initial setup
-      - "8000:8000"
+    #ports: # Only for initial setup
+    #  - "8000:8000"
     volumes:
       - ${APP_DATA_PATH}/seafile/data:/shared
     environment:
@@ -209,6 +209,8 @@ services:
     - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
     - SEAFILE_SERVER_LETSENCRYPT=false
     - SEAFILE_SERVER_HOSTNAME=seafile.${DOMAIN}
+    - SEAFILE_SERVICE_URL=https://seafile.${DOMAIN}
+    - SEAFILE_FILE_SERVER_ROOT=https://seafile.${DOMAIN}/seafhttp
     - SEAFILE_ONLYOFFICE_ENABLED=true
     - SEAFILE_ONLYOFFICE_HOST=https://oods.seafile.${DOMAIN}
     - SEAFILE_ONLYOFFICE_JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
