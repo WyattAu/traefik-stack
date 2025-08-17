@@ -1,10 +1,15 @@
 networks:
-  proxy:
-    external: true # This network must be created manually first
+  proxy-net:
+    # external: true # This network must be created manually first
+    name: proxy-net
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.32.0.0/16
   authentik-internal:
     internal: true
   seafile-internal:
-    internal: true
+    # internal: true
     name: seafile-internal
     ipam:
       driver: default
@@ -40,7 +45,7 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - proxy
+      - proxy-net
     ports:
       - "80:80"
       - "443:443"
@@ -146,7 +151,7 @@ services:
       - GITEA__server__ROOT_URL=https://gitea.${DOMAIN}
       - TZ=${TZ}
     networks:
-      - proxy
+      - proxy-net
     volumes:
       - ${APP_DATA_PATH}/gitea/data:/data
     labels:
@@ -194,26 +199,27 @@ services:
     networks:
       - seafile-internal
     entrypoint: memcached -m 256
-    healthcheck:
-      # This command uses the shell to send the "stats" command to memcached via netcat (nc)
-      # and then uses grep to check for a valid response ("STAT pid").
-      # This confirms the service is not just running, but also responsive.
-      test: ["CMD-SHELL", "echo 'stats' | nc 127.0.0.1 11211 | grep 'STAT pid'"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+#    healthcheck:
+#      # This command uses the shell to send the "stats" command to memcached via netcat (nc)
+#      # and then uses grep to check for a valid response ("STAT pid").
+#      # This confirms the service is not just running, but also responsive.
+#      test: ["CMD-SHELL", "echo 'stats' | nc 127.0.0.1 11211 | grep 'STAT pid'"]
+#      interval: 10s
+#      timeout: 5s
+#      retries: 5
 
   seafile:
     image: seafileltd/seafile-mc:13.0.8
     container_name: seafile
     restart: unless-stopped
     networks: 
-      - proxy
+      - proxy-net
       - seafile-internal
     volumes:
       - ${APP_DATA_PATH}/seafile/data:/shared
     environment:
-    - DB_HOST=seafile-db.seafile-internal
+    # - DB_HOST=seafile-db.seafile-internal
+    - DB_HOST=seafile-db
     - DB_ROOT_PASSWD=${SEAFILE_DB_PASSWORD}
     - TIME_ZONE=${TZ}
     - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
@@ -230,13 +236,14 @@ services:
       seafile-db:
         condition: service_healthy
       seafile-memcached:
-        condition: service_healthy
+#        condition: service_healthy
+        condition: service_started
     labels:
     # -------------------------------------------------------------
     #   TRAEFIK – root router (web UI)
     # -------------------------------------------------------------
     - "traefik.enable=true"
-    - "traefik.docker.network=proxy"
+    - "traefik.docker.network=proxy-net"
 
     - "traefik.http.routers.seafile.rule=Host(`seafile.${DOMAIN}`)"
     - "traefik.http.routers.seafile.tls.certresolver=cloudflare"
@@ -270,13 +277,13 @@ services:
     image: onlyoffice/documentserver:latest
     container_name: onlyoffice-documentserver
     restart: unless-stopped
-    networks: [proxy, seafile-internal]
+    networks: [proxy-net, seafile-internal]
     environment:
       - JWT_ENABLED=true
       - JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
+      - "traefik.docker.network=proxy-net"
       - "traefik.http.routers.onlyoffice.rule=Host(`oods.seafile.${DOMAIN}`)"
       - "traefik.http.routers.onlyoffice.entrypoints=websecure"
       - "traefik.http.routers.onlyoffice.tls.certresolver=cloudflare"
@@ -324,7 +331,7 @@ services:
     container_name: authentik-server
     restart: unless-stopped
     networks:
-      - proxy
+      - proxy-net
       - authentik-internal
     environment:
       - AUTHENTIK_INSECURE=true
